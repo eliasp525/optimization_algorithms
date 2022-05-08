@@ -152,9 +152,8 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
 
 
 # Example 16.2 from Nocedal Numerical Optimization 2nd Edition
-# expected r = [[2],[-1],[1],[3],[-2]]
+# expected xsol = [[2],[-1],[1]], lmdas = [[3],[-2]] 
 # only EQP
-
 xsol, lmdas = active_set_QP(
     np.matrix([[6, 2, 1], [2, 5, 2], [1, 2, 4]]),
     np.matrix([[-8], [-3], [-3]]),
@@ -165,6 +164,8 @@ xsol, lmdas = active_set_QP(
 )
 print(f"=== Solution ===\nx:\n{xsol}\nmultipliers:\n{lmdas}")
 
+# Example 16.4 from Nocedal Numerical Optimization 2nd Edition
+# expected xsol = [[1.4], [1.7]], lmdas = [[0.8]]
 xsol, lmdas = active_set_QP(
     np.matrix([[2, 0], [0, 2]]),
     np.matrix([[-2], [-5]]),
