@@ -67,22 +67,25 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
         X = list()
         xk = np.matrix([[2], [0]])  # np.zeros((nx, 1))
 
+        DECIMALS = 5
+
         iterations = 0
         while True:
             iterations += 1
-            if iterations > 10:
-                break
+            xk = xk.round(DECIMALS)
             print(f"=============== Iteration {iterations} ===============")
             print(f"Current x:\n{xk}")
             print(f"Current working set: {working_set}")
             X.append(xk)
             #define EQP based on working set
-            gk = P*xk + q
+            gk = np.matmul(P, xk) + q
+            print(f"gk:\n{gk}")
             Aeqk = np.matrix([np.array(Aiq[i, :])[0] for i in working_set])
             beqk = np.zeros((np.size(Aeqk, 0), 1))
             print(f"Aeqk:\n{Aeqk}")
             print(f"beqk:\n{beqk}")
             pk, lmda = EQP(P, gk, Aeqk, beqk)
+            pk = pk.round(DECIMALS)
             if verbose:
                 print(f"Got pk\n:{pk}\n and lmdas:\n{lmda}")
             if np.all(pk == 0):
@@ -100,6 +103,7 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                     return xk
                 else:
                     iq_in_work = list(working_set.intersection(inequality_set))
+                    print(f"iq_in_work: {iq_in_work}")
                     if iq_in_work:
                         j = iq_in_work[np.argmin(lmda)]
                         # x_{k+1} = x_{k} # not necessary to do, only here for context
@@ -120,7 +124,7 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                 
                 alphak = min({"limit": 1}, min(upper_limits_alphak, key=lambda elem: elem["limit"]), key=lambda elem: elem["limit"])
 
-                print(f"alphak:\n{type(alphak)}")
+                print(f"alphak:\n{alphak['limit']}")
                 if type(alphak) == np.matrix:
                     if np.size(alphak) != 1:
                         raise Exception
@@ -151,7 +155,7 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
 # )
 
 active_set_QP(
-    np.matrix([[1, 0], [0, 1]]),
+    np.matrix([[2, 0], [0, 2]]),
     np.matrix([[-2], [-5]]),
     np.matrix([[1, -2],[-1, -2], [-1, 2], [1, 0], [0, 1]]),
     np.matrix([[-2], [-6], [-2], [0], [0]]),
