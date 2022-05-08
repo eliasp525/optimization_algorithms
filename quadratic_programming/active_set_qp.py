@@ -54,61 +54,66 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
             Acon = Aiq
             bcon = biq
         
-        print(f"Acon:\n{Acon}")
-        print(f"bcon:\n{bcon}")
-
+        if verbose:
+            print(f"Acon:\n{Acon}")
+            print(f"bcon:\n{bcon}")
 
         #initializing variables
         working_set = set([2, 4])
         inequality_set = set(np.linspace(0, iq_constraints-1, iq_constraints, dtype=int))
         equaility_set = set(np.linspace(iq_constraints, iq_constraints+eq_constraints-1, eq_constraints, dtype=int))
-        print("inequality_set:\n", inequality_set, "\nequality_set:\n", equaility_set)
+        if verbose:
+            print("inequality_set:\n", inequality_set, "\nequality_set:\n", equaility_set)
         
-        X = list()
+        X = list() # currently not returned, but could be become useful
         xk = np.matrix([[2], [0]])  # np.zeros((nx, 1))
 
         DECIMALS = 5
-
         iterations = 0
         while True:
             iterations += 1
             xk = xk.round(DECIMALS)
-            print(f"=============== Iteration {iterations} ===============")
-            print(f"Current x:\n{xk}")
-            print(f"Current working set: {working_set}")
             X.append(xk)
+            
+            if verbose:
+                print(f"=============== Iteration {iterations} ===============")
+                print(f"Current x:\n{xk}")
+                print(f"Current working set: {working_set}")
+            
             #define EQP based on working set
             gk = np.matmul(P, xk) + q
-            print(f"gk:\n{gk}")
             Aeqk = np.matrix([np.array(Aiq[i, :])[0] for i in working_set])
             beqk = np.zeros((np.size(Aeqk, 0), 1))
-            print(f"Aeqk:\n{Aeqk}")
-            print(f"beqk:\n{beqk}")
+            if verbose:
+                print(f"Aeqk:\n{Aeqk}")
+                print(f"beqk:\n{beqk}")
+            
             pk, lmda = EQP(P, gk, Aeqk, beqk)
             pk = pk.round(DECIMALS)
+            
             if verbose:
                 print(f"Got pk\n:{pk}\n and lmdas:\n{lmda}")
+            
             if np.all(pk == 0):
-                # when p == 0 we reach the point x̂ 
-                # that minimizes the quadratic objective 
-                # function over its current working set
-                xhat = xk
+                '''
+                When p == 0 we reach the point x̂ 
+                that minimizes the quadratic objective 
+                function over its current working set.
+                '''
                 # Compute Lagrange multipliers λ̂i that satisfy (16.42) based on current working set
-                # print(f"Aeqk:\n{Aeqk}")
-                # print(f"P*xhat + q:\n{P*xhat + q}")
-                # lmda = np.linalg.solve(np.transpose(Aeqk), P*xhat + q)
-                # print(f"lmda:\n {lmda}")
+                # (these are already calculated in lmda = EQP(...))
                 if np.all(lmda >= 0):
-                    print(f"Found solution:\n{xk}")
-                    return xk
+                    if verbose:
+                        print(f"Found solution:\n{xk}")
+                    return xk, lmda
                 else:
                     iq_in_work = list(working_set.intersection(inequality_set))
-                    print(f"iq_in_work: {iq_in_work}")
                     if iq_in_work:
                         j = iq_in_work[np.argmin(lmda)]
                         # x_{k+1} = x_{k} # not necessary to do, only here for context
                         working_set.remove(j)
-                        print(f"Removed {j} from working set")
+                        if verbose:
+                            print(f"Removed {j} from working set")
             else:
                 nowork_set = inequality_set.union(equaility_set) - working_set
                 upper_limits_alphak = list()
@@ -123,20 +128,25 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                     upper_limits_alphak.append({"limit": limit, "i": i})
                 
                 alphak = min({"limit": 1}, min(upper_limits_alphak, key=lambda elem: elem["limit"]), key=lambda elem: elem["limit"])
-
-                print(f"alphak:\n{alphak['limit']}")
+                if verbose:
+                    print(f"alphak:\n{alphak['limit']}")
+                
+                # ensure type int or float
                 if type(alphak) == np.matrix:
                     if np.size(alphak) != 1:
                         raise Exception
                     alphak = alphak[0, 0]
                 xk = xk + alphak["limit"]*pk
                 if alphak["limit"] != 1:
-                    # if there are blocking constraints
-                    # add one of the blocking constraints
+                    ''' 
+                    if there are blocking constraints, 
+                    add one of the blocking constraints
+                    '''
                     working_set.add(alphak["i"])
-                    print(f"Added {alphak['i']} to working set")
+                    if verbose:
+                        print(f"Added {alphak['i']} to working set")
                 else:
-                    # W_{k+1} = W_k not necessary to do, only here for context
+                    '''W_{k+1} = W_k not necessary to do, only here for context'''
                     pass
 
 
@@ -145,21 +155,23 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
 # expected r = [[2],[-1],[1],[3],[-2]]
 # only EQP
 
-# active_set_QP(
-#     np.matrix([[6, 2, 1], [2, 5, 2], [1, 2, 4]]),
-#     np.matrix([[-8], [-3], [-3]]),
-#     np.matrix([]),
-#     np.matrix([]),
-#     np.matrix([[1, 0, 1], [0, 1, 1]]),
-#     np.matrix([[3], [0]])
-# )
+xsol, lmdas = active_set_QP(
+    np.matrix([[6, 2, 1], [2, 5, 2], [1, 2, 4]]),
+    np.matrix([[-8], [-3], [-3]]),
+    np.matrix([]),
+    np.matrix([]),
+    np.matrix([[1, 0, 1], [0, 1, 1]]),
+    np.matrix([[3], [0]])
+)
+print(f"=== Solution ===\nx:\n{xsol}\nmultipliers:\n{lmdas}")
 
-active_set_QP(
+xsol, lmdas = active_set_QP(
     np.matrix([[2, 0], [0, 2]]),
     np.matrix([[-2], [-5]]),
     np.matrix([[1, -2],[-1, -2], [-1, 2], [1, 0], [0, 1]]),
     np.matrix([[-2], [-6], [-2], [0], [0]]),
     np.matrix([]),
-    np.matrix([])
+    np.matrix([]),
+    verbose=False
 )
-
+print(f"=== Solution ===\nx:\n{xsol}\nmultipliers:\n{lmdas}")
