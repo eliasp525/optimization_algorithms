@@ -1,6 +1,6 @@
 import numpy as np
 from eqp import EQP
-import random
+from qp_results import Results, IterationResult
 
 
 def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix, Aeq : np.matrix, beq : np.matrix, verbose = True):
@@ -39,12 +39,17 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
         eq_constraints = np.size(Aeq, 0)
     
     if equailites and not inequalities:
-        return EQP(P, q, Aeq, beq)
-    
+        results = Results()
+        iteration = IterationResult(0)
+        iteration.xk, iteration.lmda = EQP(P, q, Aeq, beq) 
+        results.iterations.append(iteration)
+        results.success = True
+        return results
+
     if inequalities:
         '''
-        Algorithm 16.3 in Nocedal
-        ===========================
+        Algorithm 16.3 in Nocedal Numerical Optimization 2nd Edition
+        ============================================================
         '''
         # just putting every constraint into Acon and bcon
         if equailites:
@@ -53,46 +58,31 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
         else:
             Acon = Aiq
             bcon = biq
-        
-        if verbose:
-            print(f"Acon:\n{Acon}")
-            print(f"bcon:\n{bcon}")
 
         #initializing variables
-        working_set = set([2, 4])
+        working_set = set()
         inequality_set = set(np.linspace(0, iq_constraints-1, iq_constraints, dtype=int))
         equaility_set = set(np.linspace(iq_constraints, iq_constraints+eq_constraints-1, eq_constraints, dtype=int))
-        if verbose:
-            print("inequality_set:\n", inequality_set, "\nequality_set:\n", equaility_set)
         
-        X = list() # currently not returned, but could be become useful
-        xk = np.matrix([[2], [0]])  # np.zeros((nx, 1))
-
+        xk = np.matrix([[2], [0]])
+        results = Results()
         DECIMALS = 5
-        iterations = 0
+        
+        counter_k = 0
         while True:
-            iterations += 1
-            xk = xk.round(DECIMALS)
-            X.append(xk)
+            iteration = IterationResult(counter_k)
+            iteration.working_set = working_set
+            counter_k += 1
+            iteration.xk = xk
             
-            if verbose:
-                print(f"=============== Iteration {iterations} ===============")
-                print(f"Current x:\n{xk}")
-                print(f"Current working set: {working_set}")
-            
-            #define EQP based on working set
+            # define EQP based on working set
             gk = np.matmul(P, xk) + q
             Aeqk = np.matrix([np.array(Aiq[i, :])[0] for i in working_set])
-            beqk = np.zeros((np.size(Aeqk, 0), 1))
-            if verbose:
-                print(f"Aeqk:\n{Aeqk}")
-                print(f"beqk:\n{beqk}")
-            
+            beqk = np.zeros((np.size(Aeqk, 0), 1))            
             pk, lmda = EQP(P, gk, Aeqk, beqk)
             pk = pk.round(DECIMALS)
-            
-            if verbose:
-                print(f"Got pk\n:{pk}\n and lmdas:\n{lmda}")
+            iteration.pk = pk
+            iteration.lmda = lmda
             
             if np.all(pk == 0):
                 '''
@@ -103,20 +93,19 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                 # Compute Lagrange multipliers λ̂i that satisfy (16.42) based on current working set
                 # (these are already calculated in lmda = EQP(...))
                 if np.all(lmda >= 0):
-                    if verbose:
-                        print(f"Found solution:\n{xk}")
-                    return xk, lmda
+                    results.success = True
+                    results.iterations.append(iteration)
+                    return results
                 else:
                     iq_in_work = list(working_set.intersection(inequality_set))
                     if iq_in_work:
                         j = iq_in_work[np.argmin(lmda)]
                         # x_{k+1} = x_{k} # not necessary to do, only here for context
                         working_set.remove(j)
-                        if verbose:
-                            print(f"Removed {j} from working set")
+                        iteration.idx_from_work = j
             else:
                 nowork_set = inequality_set.union(equaility_set) - working_set
-                upper_limits_alphak = list()
+                upper_limits_alphak = [{"limit":1, "i": None}]
                 for _, i in enumerate(nowork_set):
                     aiT = Acon[i, :]
                     aiTpk = np.matmul(aiT, pk)
@@ -127,34 +116,32 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                     limit = float((bi-aiTxk)/aiTpk)
                     upper_limits_alphak.append({"limit": limit, "i": i})
                 
-                alphak = min({"limit": 1}, min(upper_limits_alphak, key=lambda elem: elem["limit"]), key=lambda elem: elem["limit"])
-                if verbose:
-                    print(f"alphak:\n{alphak['limit']}")
-                
+                alphak = min(upper_limits_alphak, key=lambda elem: elem["limit"])
+                iteration.alphak = alphak
+
                 # ensure type int or float
                 if type(alphak) == np.matrix:
                     if np.size(alphak) != 1:
                         raise Exception
                     alphak = alphak[0, 0]
-                xk = xk + alphak["limit"]*pk
+                xk = (xk + alphak["limit"]*pk).round(DECIMALS)
                 if alphak["limit"] != 1:
                     ''' 
                     if there are blocking constraints, 
                     add one of the blocking constraints
                     '''
                     working_set.add(alphak["i"])
-                    if verbose:
-                        print(f"Added {alphak['i']} to working set")
+                    iteration.idx_to_work = alphak["i"]
                 else:
                     '''W_{k+1} = W_k not necessary to do, only here for context'''
                     pass
-
+            results.iterations.append(iteration)
 
 
 # Example 16.2 from Nocedal Numerical Optimization 2nd Edition
 # expected xsol = [[2],[-1],[1]], lmdas = [[3],[-2]] 
 # only EQP
-xsol, lmdas = active_set_QP(
+results = active_set_QP(
     np.matrix([[6, 2, 1], [2, 5, 2], [1, 2, 4]]),
     np.matrix([[-8], [-3], [-3]]),
     np.matrix([]),
@@ -162,11 +149,12 @@ xsol, lmdas = active_set_QP(
     np.matrix([[1, 0, 1], [0, 1, 1]]),
     np.matrix([[3], [0]])
 )
-print(f"=== Solution ===\nx:\n{xsol}\nmultipliers:\n{lmdas}")
+results.print_solution()
+# results.print_iterations()
 
 # Example 16.4 from Nocedal Numerical Optimization 2nd Edition
 # expected xsol = [[1.4], [1.7]], lmdas = [[0.8]]
-xsol, lmdas = active_set_QP(
+results = active_set_QP(
     np.matrix([[2, 0], [0, 2]]),
     np.matrix([[-2], [-5]]),
     np.matrix([[1, -2],[-1, -2], [-1, 2], [1, 0], [0, 1]]),
@@ -175,4 +163,5 @@ xsol, lmdas = active_set_QP(
     np.matrix([]),
     verbose=False
 )
-print(f"=== Solution ===\nx:\n{xsol}\nmultipliers:\n{lmdas}")
+results.print_solution()
+# results.print_iterations()
