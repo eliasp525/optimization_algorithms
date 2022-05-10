@@ -1,9 +1,11 @@
+from multiprocessing.sharedctypes import Value
 import numpy as np
 from eqp import EQP
 from qp_results import Results, IterationResult
+from qp_options import Options
 
 
-def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix, Aeq : np.matrix, beq : np.matrix, verbose = True):
+def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix, Aeq : np.matrix, beq : np.matrix, options = Options(0)):
     '''
     Solves problem on the form
     min { 1/2 x^T P x + q^T x }
@@ -54,19 +56,29 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
         # just putting every constraint into Acon and bcon
         if equailites:
             Acon = np.block([[Aiq],[Aeq]])
-            bcon = np.block([[biq], [beq]])
+            bcon = np.block([[biq],[beq]])
         else:
             Acon = Aiq
             bcon = biq
 
         #initializing variables
-        working_set = set()
         inequality_set = set(np.linspace(0, iq_constraints-1, iq_constraints, dtype=int))
         equaility_set = set(np.linspace(iq_constraints, iq_constraints+eq_constraints-1, eq_constraints, dtype=int))
         
-        xk = np.matrix([[2], [0]])
+        xk = np.zeros((nx, 1))
+        if options.x_init:
+            if not options.x_init.shape == xk.shape:
+                raise ValueError("x_init in options has dimension %s, which does not match expected size of %s." % (options.x_init.shape, xk.shape))
+            xk = options.x_init
+        
+        working_set = set()
+        if options.working_set_init:
+            arr = np.array(list(options.working_set_init))
+            if not (np.all(arr >= 0) and np.all(arr <= iq_constraints + eq_constraints - 1)):
+                raise ValueError("Working set from options includes index not present among contraints.")
+            working_set = options.working_set_init
+
         results = Results()
-        DECIMALS = 5
         
         counter_k = 0
         while True:
@@ -80,7 +92,7 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
             Aeqk = np.matrix([np.array(Aiq[i, :])[0] for i in working_set])
             beqk = np.zeros((np.size(Aeqk, 0), 1))            
             pk, lmda = EQP(P, gk, Aeqk, beqk)
-            pk = pk.round(DECIMALS)
+            pk = pk.round(options.decimal_precision)
             iteration.pk = pk
             iteration.lmda = lmda
             
@@ -124,7 +136,7 @@ def active_set_QP(P : np.matrix, q : np.matrix, Aiq : np.matrix, biq : np.matrix
                     if np.size(alphak) != 1:
                         raise Exception
                     alphak = alphak[0, 0]
-                xk = (xk + alphak["limit"]*pk).round(DECIMALS)
+                xk = (xk + alphak["limit"]*pk).round(options.decimal_precision)
                 if alphak["limit"] != 1:
                     ''' 
                     if there are blocking constraints, 
@@ -160,8 +172,7 @@ results = active_set_QP(
     np.matrix([[1, -2],[-1, -2], [-1, 2], [1, 0], [0, 1]]),
     np.matrix([[-2], [-6], [-2], [0], [0]]),
     np.matrix([]),
-    np.matrix([]),
-    verbose=False
+    np.matrix([])
 )
 results.print_solution()
 # results.print_iterations()
