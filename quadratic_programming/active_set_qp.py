@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import numpy as np
 from eqp import EQP
 from qp_results import Results, IterationResult
